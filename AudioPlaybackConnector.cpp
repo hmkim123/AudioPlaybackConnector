@@ -1,13 +1,30 @@
 #include "pch.h"
 #include "AudioPlaybackConnector.h"
 
+#include <bluetoothapis.h>
+#pragma comment(lib, "Bthprops.lib")
+
+#define TIMER_ID 1
+
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 void SetupFlyout();
 void SetupMenu();
 winrt::fire_and_forget ConnectDevice(DevicePicker, std::wstring_view);
 void SetupDevicePicker();
 void SetupSvgIcon();
-void UpdateNotifyIcon();
+void UpdateNotifyIcon(bool byFlag);
+
+bool IsBluetoothDeviceConnected(const BTH_ADDR& deviceAddress)
+{
+	BLUETOOTH_DEVICE_INFO deviceInfo = { sizeof(BLUETOOTH_DEVICE_INFO) };
+	deviceInfo.Address.ullLong = deviceAddress;
+
+	HRESULT hr = BluetoothGetDeviceInfo(NULL, &deviceInfo);
+	if (FAILED(hr))
+		return false; // 장치 정보를 가져오는 데 실패
+
+	return deviceInfo.fConnected; // 연결 상태 반환
+}
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	_In_opt_ HINSTANCE hPrevInstance,
@@ -74,7 +91,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 	g_nid.hWnd = g_niid.hWnd = g_hWnd;
 	wcscpy_s(g_nid.szTip, _(L"AudioPlaybackConnector"));
-	UpdateNotifyIcon();
+	UpdateNotifyIcon(true);
 
 	WM_TASKBAR_CREATED = RegisterWindowMessageW(L"TaskbarCreated");
 	LOG_LAST_ERROR_IF(WM_TASKBAR_CREATED == 0);
@@ -100,7 +117,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	switch (message)
 	{
+	case WM_CREATE:
+		SetTimer(hWnd, TIMER_ID, 1000, NULL);
+		break;
+	case WM_TIMER:
+		if (wParam == TIMER_ID) {
+			if (g_connected == true)
+				UpdateNotifyIcon(false);
+		}
+		break;
 	case WM_DESTROY:
+		KillTimer(hWnd, TIMER_ID);
 		for (const auto& connection : g_audioPlaybackConnections)
 		{
 			connection.second.second.Close();
@@ -122,7 +149,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_SETTINGCHANGE:
 		if (lParam && CompareStringOrdinal(reinterpret_cast<LPCWCH>(lParam), -1, L"ImmersiveColorSet", -1, TRUE) == CSTR_EQUAL)
 		{
-			UpdateNotifyIcon();
+			UpdateNotifyIcon(true);
 		}
 		break;
 	case WM_NOTIFYICON:
@@ -190,7 +217,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	default:
 		if (WM_TASKBAR_CREATED && message == WM_TASKBAR_CREATED)
 		{
-			UpdateNotifyIcon();
+			UpdateNotifyIcon(true);
 		}
 		return DefWindowProcW(hWnd, message, wParam, lParam);
 	}
@@ -367,6 +394,8 @@ winrt::fire_and_forget ConnectDevice(DevicePicker picker, DeviceInformation devi
 	if (success)
 	{
 		picker.SetDisplayStatus(device, _(L"Connected"), DevicePickerDisplayStatusOptions::ShowDisconnectButton);
+		g_connected = true;
+		UpdateNotifyIcon(true);
 	}
 	else
 	{
@@ -407,6 +436,8 @@ void SetupDevicePicker()
 			g_audioPlaybackConnections.erase(it);
 		}
 		sender.SetDisplayStatus(device, {}, DevicePickerDisplayStatusOptions::None);
+		g_connected = false;
+		UpdateNotifyIcon(true);
 	});
 }
 
@@ -427,15 +458,33 @@ void SetupSvgIcon()
 	const std::string_view svg(svgData, size);
 	const int width = GetSystemMetrics(SM_CXSMICON), height = GetSystemMetrics(SM_CYSMICON);
 
-	g_hIconLight = SvgTohIcon(svg, width, height, { 0, 0, 0, 1 });
-	g_hIconDark = SvgTohIcon(svg, width, height, { 1, 1, 1, 1 });
+	g_hIconConnected = SvgTohIcon(svg, width, height, { 0, 1, 0, 1 });
+	g_hIconDisconnected = SvgTohIcon(svg, width, height, { 1, 0, 0, 1 });
 }
 
-void UpdateNotifyIcon()
+void UpdateNotifyIcon(bool byFlag)
 {
-	DWORD value = 0, cbValue = sizeof(value);
-	LOG_IF_WIN32_ERROR(RegGetValueW(HKEY_CURRENT_USER, LR"(Software\Microsoft\Windows\CurrentVersion\Themes\Personalize)", L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &cbValue));
-	g_nid.hIcon = value != 0 ? g_hIconLight : g_hIconDark;
+	if (byFlag == true)
+	{
+		if (g_connected == true)
+			g_nid.hIcon = g_hIconConnected;
+		else
+			g_nid.hIcon = g_hIconDisconnected;
+	}
+	else
+	{
+		BTH_ADDR connectedDeviceAddress = 0x0C323A71348C;
+		if (IsBluetoothDeviceConnected(connectedDeviceAddress))
+		{
+			g_nid.hIcon = g_hIconConnected;
+			g_connected = true;
+		}
+		else
+		{
+			g_nid.hIcon = g_hIconDisconnected;
+			g_connected = false;
+		}
+	}
 
 	if (!Shell_NotifyIconW(NIM_MODIFY, &g_nid))
 	{
