@@ -1,17 +1,6 @@
 # AudioPlaybackConnector
-**English** | [简体中文](https://github.com/ysc3839/AudioPlaybackConnector/blob/master/README.zh_CN.md)
 
-Bluetooth audio playback (A2DP Sink) connector for Windows 10 2004+.
+Based on [https://github.com/ysc3839/AudioPlaybackConnector](https://github.com/ysc3839/AudioPlaybackConnector/releases/tag/v1.3.1), improved tray icon color - green when connected, and red when disconnected.
 
-Microsoft added Bluetooth A2DP Sink to Windows 10 2004. However, a third-party app is required to manage connection.\
-There is already an app can do this job. However it can't hide to notification area and it's not open-source.\
-So I write this app, provide a simple, modern and open-source alternative.
-
-# Preview
-![Preview](https://cdn.jsdelivr.net/gh/ysc3839/AudioPlaybackConnector@master/AudioPlaybackConnector.gif)
-
-# Usage
-* Download and run AudioPlaybackConnector from [releases](https://github.com/ysc3839/AudioPlaybackConnector/releases).
-* Add a bluetooth device in system bluetooth settings. You can right click AudioPlaybackConnector icon in notification area and select "Bluetooth Settings".
-* Click AudioPlaybackConnector icon and select the device you want to connect.
-* Enjoy!
+To make it work, you need to change the BT device address to what you want.
+[https://github.com/hmkim123/AudioPlaybackConnector/commit/6d83f3e4d04a979c4846ce7129c02dc8e7e7b2e7#diff-04b0d548dcf888b3c84ee9703f7f87921c6a52a45d3d92d59a9e533559dd3380R476](https://github.com/hmkim123/AudioPlaybackConnector/blob/6d83f3e4d04a979c4846ce7129c02dc8e7e7b2e7/AudioPlaybackConnector.cpp#L476)
