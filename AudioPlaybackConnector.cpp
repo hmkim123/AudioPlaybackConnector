@@ -127,24 +127,32 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 		break;
 	case WM_DESTROY:
+	{
 		KillTimer(hWnd, TIMER_ID);
-		for (const auto& connection : g_audioPlaybackConnections)
+//		for (const auto& connection : g_audioPlaybackConnections)
+		auto connectionsToClose = std::move(g_audioPlaybackConnections);
+		g_audioPlaybackConnections.clear();
+		for (const auto& connection : connectionsToClose)
 		{
 			connection.second.second.Close();
 			g_devicePicker.SetDisplayStatus(connection.second.first, {}, DevicePickerDisplayStatusOptions::None);
 		}
 		if (g_reconnect)
 		{
-			SaveSettings();
-			g_audioPlaybackConnections.clear();
+//			SaveSettings();
+//			g_audioPlaybackConnections.clear();
+			g_audioPlaybackConnections = std::move(connectionsToClose);
 		}
-		else
-		{
-			g_audioPlaybackConnections.clear();
+//		else
+//		{
+//			g_audioPlaybackConnections.clear();
 			SaveSettings();
-		}
+//		}
+		DestroyIcon(g_hIconConnected);
+		DestroyIcon(g_hIconDisconnected);
 		Shell_NotifyIconW(NIM_DELETE, &g_nid);
 		PostQuitMessage(0);
+	}
 		break;
 	case WM_SETTINGCHANGE:
 		if (lParam && CompareStringOrdinal(reinterpret_cast<LPCWCH>(lParam), -1, L"ImmersiveColorSet", -1, TRUE) == CSTR_EQUAL)
