@@ -1,14 +1,14 @@
 #include "pch.h"
 #include "AudioPlaybackConnector.h"
 
-#include <bluetoothapis.h>
-#pragma comment(lib, "Bthprops.lib")
+BTH_ADDR g_connectedDeviceAddress = 0;
 
 #define TIMER_ID 1
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 void SetupFlyout();
 void SetupMenu();
+void SetupSetAddressFlyout();
 winrt::fire_and_forget ConnectDevice(DevicePicker, std::wstring_view);
 void SetupDevicePicker();
 void SetupSvgIcon();
@@ -86,6 +86,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	LoadSettings();
 	SetupFlyout();
 	SetupMenu();
+	SetupSetAddressFlyout();
 	SetupDevicePicker();
 	SetupSvgIcon();
 
@@ -275,6 +276,16 @@ void SetupMenu()
 		winrt::Windows::System::Launcher::LaunchUriAsync(Uri(L"ms-settings:bluetooth"));
 	});
 
+	FontIcon deviceAddressIcon;
+	deviceAddressIcon.Glyph(L"\xE836");
+
+	MenuFlyoutItem deviceAddressItem;
+	deviceAddressItem.Text(_(L"Set Device Address"));
+	deviceAddressItem.Icon(deviceAddressIcon);
+	deviceAddressItem.Click([](const auto&, const auto&) {
+		g_xamlSetAddressFlyout.ShowAt(g_xamlCanvas);
+	});
+
 	FontIcon closeIcon;
 	closeIcon.Glyph(L"\xE8BB");
 
@@ -307,6 +318,7 @@ void SetupMenu()
 
 	MenuFlyout menu;
 	menu.Items().Append(settingsItem);
+	menu.Items().Append(deviceAddressItem);
 	menu.Items().Append(exitItem);
 	menu.Opened([](const auto& sender, const auto&) {
 		auto menuItems = sender.as<MenuFlyout>().Items();
@@ -322,6 +334,40 @@ void SetupMenu()
 	});
 
 	g_xamlMenu = menu;
+}
+
+void SetupSetAddressFlyout()
+{
+	g_addressBox = TextBox();
+	g_addressBox.Header(winrt::box_value(L"Device Address (hex)"));
+
+	Button okButton;
+	okButton.Content(winrt::box_value(L"OK"));
+	okButton.Click([](const auto&, const auto&) {
+		std::wstring addressString = g_addressBox.Text().c_str();
+		std::wstringstream ss;
+		ss << std::hex << addressString;
+		ss >> g_connectedDeviceAddress;
+		SaveSettings();
+		g_xamlSetAddressFlyout.Hide();
+	});
+
+	Button cancelButton;
+	cancelButton.Content(winrt::box_value(L"Cancel"));
+	cancelButton.Click([](const auto&, const auto&) {
+		g_xamlSetAddressFlyout.Hide();
+	});
+
+	StackPanel stackPanel;
+	stackPanel.Children().Append(g_addressBox);
+	stackPanel.Children().Append(okButton);
+	stackPanel.Children().Append(cancelButton);
+
+	Flyout flyout;
+	flyout.ShouldConstrainToRootBounds(false);
+	flyout.Content(stackPanel);
+
+	g_xamlSetAddressFlyout = flyout;
 }
 
 winrt::fire_and_forget ConnectDevice(DevicePicker picker, DeviceInformation device)
@@ -341,7 +387,7 @@ winrt::fire_and_forget ConnectDevice(DevicePicker picker, DeviceInformation devi
 			connection.StateChanged([](const auto& sender, const auto&) {
 				if (sender.State() == AudioPlaybackConnectionState::Closed)
 				{
-					auto it = g_audioPlaybackConnections.find(std::wstring(sender.DeviceId()));
+					auto it = g_audioPlaybackConnections.find(std::wstring(sender.DeviceId().c_str()));
 					if (it != g_audioPlaybackConnections.end())
 					{
 						g_devicePicker.SetDisplayStatus(it->second.first, {}, DevicePickerDisplayStatusOptions::None);
@@ -407,7 +453,7 @@ winrt::fire_and_forget ConnectDevice(DevicePicker picker, DeviceInformation devi
 	}
 	else
 	{
-		auto it = g_audioPlaybackConnections.find(std::wstring(device.Id()));
+		auto it = g_audioPlaybackConnections.find(std::wstring(device.Id().c_str()));
 		if (it != g_audioPlaybackConnections.end())
 		{
 			it->second.second.Close();
@@ -437,7 +483,7 @@ void SetupDevicePicker()
 	});
 	g_devicePicker.DisconnectButtonClicked([](const auto& sender, const auto& args) {
 		auto device = args.Device();
-		auto it = g_audioPlaybackConnections.find(std::wstring(device.Id()));
+		auto it = g_audioPlaybackConnections.find(std::wstring(device.Id().c_str()));
 		if (it != g_audioPlaybackConnections.end())
 		{
 			it->second.second.Close();
@@ -481,8 +527,7 @@ void UpdateNotifyIcon(bool byFlag)
 	}
 	else
 	{
-		BTH_ADDR connectedDeviceAddress = 0x0C323A71348C;
-		if (IsBluetoothDeviceConnected(connectedDeviceAddress))
+		if (IsBluetoothDeviceConnected(g_connectedDeviceAddress))
 		{
 			g_nid.hIcon = g_hIconConnected;
 			g_connected = true;

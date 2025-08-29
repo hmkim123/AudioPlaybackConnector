@@ -18,6 +18,9 @@
 #include <shobjidl_core.h>
 #include <d2d1_3.h>
 #include <shlwapi.h>
+#include <bluetoothapis.h>
+
+#pragma comment(lib, "Bthprops.lib")
 
 // C++ RunTime Header Files
 #include <cstdlib>

@@ -20,6 +20,8 @@ HWND g_hWndXaml;
 Canvas g_xamlCanvas = nullptr;
 Flyout g_xamlFlyout = nullptr;
 MenuFlyout g_xamlMenu = nullptr;
+Flyout g_xamlSetAddressFlyout = nullptr;
+TextBox g_addressBox = nullptr;
 FocusState g_menuFocusState = FocusState::Unfocused;
 DevicePicker g_devicePicker = nullptr;
 std::unordered_map<std::wstring, std::pair<DeviceInformation, AudioPlaybackConnection>> g_audioPlaybackConnections;
@@ -38,6 +40,7 @@ UINT WM_TASKBAR_CREATED = 0;
 bool g_reconnect = false;
 bool g_connected = false;
 std::vector<std::wstring> g_lastDevices;
+extern BTH_ADDR g_connectedDeviceAddress;
 
 #include "Util.hpp"
 #include "I18n.hpp"

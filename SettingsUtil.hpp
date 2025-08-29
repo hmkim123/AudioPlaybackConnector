@@ -1,5 +1,8 @@
 #pragma once
 
+#include <string>
+#include <sstream>
+
 constexpr auto CONFIG_NAME = L"AudioPlaybackConnector.json";
 constexpr auto BUFFER_SIZE = 4096;
 
@@ -7,6 +10,7 @@ void DefaultSettings()
 {
 	g_reconnect = false;
 	g_lastDevices.clear();
+	g_connectedDeviceAddress = 0;
 }
 
 void LoadSettings()
@@ -39,7 +43,15 @@ void LoadSettings()
 		for (const auto& i : lastDevices)
 		{
 			if (i.ValueType() == JsonValueType::String)
-				g_lastDevices.push_back(std::wstring(i.GetString()));
+				g_lastDevices.push_back(std::wstring(i.GetString().c_str()));
+		}
+
+		if (jsonObj.HasKey(L"connectedDeviceAddress"))
+		{
+			std::wstring addressString = jsonObj.Lookup(L"connectedDeviceAddress").GetString().c_str();
+			std::wstringstream ss;
+			ss << std::hex << addressString;
+			ss >> g_connectedDeviceAddress;
 		}
 	}
 	CATCH_LOG();
@@ -55,9 +67,13 @@ void SaveSettings()
 		JsonArray lastDevices;
 		for (const auto& i : g_audioPlaybackConnections)
 		{
-			lastDevices.Append(JsonValue::CreateStringValue(i.first));
+			lastDevices.Append(JsonValue::CreateStringValue(i.first.c_str()));
 		}
 		jsonObj.Insert(L"lastDevices", lastDevices);
+
+		std::wstringstream ss;
+		ss << std::hex << g_connectedDeviceAddress;
+		jsonObj.Insert(L"connectedDeviceAddress", JsonValue::CreateStringValue(ss.str().c_str()));
 
 		wil::unique_hfile hFile(CreateFileW((GetModuleFsPath(g_hInst).remove_filename() / CONFIG_NAME).c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
 		THROW_LAST_ERROR_IF(!hFile);
