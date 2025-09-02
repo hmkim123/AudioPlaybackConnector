@@ -7,7 +7,7 @@ void SetupMenu();
 winrt::fire_and_forget ConnectDevice(DevicePicker, std::wstring_view);
 void SetupDevicePicker();
 void SetupSvgIcon();
-void UpdateNotifyIcon();
+void UpdateNotifyIcon(bool);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	_In_opt_ HINSTANCE hPrevInstance,
@@ -74,7 +74,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 	g_nid.hWnd = g_niid.hWnd = g_hWnd;
 	wcscpy_s(g_nid.szTip, _(L"AudioPlaybackConnector"));
-	UpdateNotifyIcon();
+	UpdateNotifyIcon(false);
 
 	WM_TASKBAR_CREATED = RegisterWindowMessageW(L"TaskbarCreated");
 	LOG_LAST_ERROR_IF(WM_TASKBAR_CREATED == 0);
@@ -117,12 +117,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			SaveSettings();
 		}
 		Shell_NotifyIconW(NIM_DELETE, &g_nid);
+		DestroyIcon(g_hIconRed);
+		DestroyIcon(g_hIconGreen);
+		UnregisterClassW(L"AudioPlaybackConnector", g_hInst);
 		PostQuitMessage(0);
 		break;
 	case WM_SETTINGCHANGE:
 		if (lParam && CompareStringOrdinal(reinterpret_cast<LPCWCH>(lParam), -1, L"ImmersiveColorSet", -1, TRUE) == CSTR_EQUAL)
 		{
-			UpdateNotifyIcon();
+			UpdateNotifyIcon(g_audioPlaybackConnections.size() > 0);
 		}
 		break;
 	case WM_NOTIFYICON:
@@ -190,7 +193,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	default:
 		if (WM_TASKBAR_CREATED && message == WM_TASKBAR_CREATED)
 		{
-			UpdateNotifyIcon();
+			UpdateNotifyIcon(g_audioPlaybackConnections.size() > 0);
 		}
 		return DefWindowProcW(hWnd, message, wParam, lParam);
 	}
@@ -311,6 +314,10 @@ winrt::fire_and_forget ConnectDevice(DevicePicker picker, DeviceInformation devi
 					{
 						g_devicePicker.SetDisplayStatus(it->second.first, {}, DevicePickerDisplayStatusOptions::None);
 						g_audioPlaybackConnections.erase(it);
+						if (g_audioPlaybackConnections.size() == 0)
+						{
+							UpdateNotifyIcon(false);
+						}
 					}
 					sender.Close();
 				}
@@ -348,7 +355,7 @@ winrt::fire_and_forget ConnectDevice(DevicePicker picker, DeviceInformation devi
 	{
 		success = false;
 		errorMessage.resize(64);
-		while (1)
+		for (int i = 0; i < 10; ++i)
 		{
 			auto result = swprintf(errorMessage.data(), errorMessage.size(), L"%s (0x%08X)", ex.message().c_str(), static_cast<uint32_t>(ex.code()));
 			if (result < 0)
@@ -367,6 +374,7 @@ winrt::fire_and_forget ConnectDevice(DevicePicker picker, DeviceInformation devi
 	if (success)
 	{
 		picker.SetDisplayStatus(device, _(L"Connected"), DevicePickerDisplayStatusOptions::ShowDisconnectButton);
+		UpdateNotifyIcon(true);
 	}
 	else
 	{
@@ -377,6 +385,7 @@ winrt::fire_and_forget ConnectDevice(DevicePicker picker, DeviceInformation devi
 			g_audioPlaybackConnections.erase(it);
 		}
 		picker.SetDisplayStatus(device, errorMessage, DevicePickerDisplayStatusOptions::ShowRetryButton);
+		UpdateNotifyIcon(false);
 	}
 }
 
@@ -405,6 +414,10 @@ void SetupDevicePicker()
 		{
 			it->second.second.Close();
 			g_audioPlaybackConnections.erase(it);
+			if (g_audioPlaybackConnections.size() == 0)
+			{
+				UpdateNotifyIcon(false);
+			}
 		}
 		sender.SetDisplayStatus(device, {}, DevicePickerDisplayStatusOptions::None);
 	});
@@ -427,15 +440,20 @@ void SetupSvgIcon()
 	const std::string_view svg(svgData, size);
 	const int width = GetSystemMetrics(SM_CXSMICON), height = GetSystemMetrics(SM_CYSMICON);
 
-	g_hIconLight = SvgTohIcon(svg, width, height, { 0, 0, 0, 1 });
-	g_hIconDark = SvgTohIcon(svg, width, height, { 1, 1, 1, 1 });
+	g_hIconRed = SvgTohIcon(svg, width, height, { 1, 0, 0, 1 });
+	g_hIconGreen = SvgTohIcon(svg, width, height, { 0, 1, 0, 1 });
 }
 
-void UpdateNotifyIcon()
+void UpdateNotifyIcon(bool connected)
 {
-	DWORD value = 0, cbValue = sizeof(value);
-	LOG_IF_WIN32_ERROR(RegGetValueW(HKEY_CURRENT_USER, LR"(Software\Microsoft\Windows\CurrentVersion\Themes\Personalize)", L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &cbValue));
-	g_nid.hIcon = value != 0 ? g_hIconLight : g_hIconDark;
+	if (connected)
+	{
+		g_nid.hIcon = g_hIconGreen;
+	}
+	else
+	{
+		g_nid.hIcon = g_hIconRed;
+	}
 
 	if (!Shell_NotifyIconW(NIM_MODIFY, &g_nid))
 	{
