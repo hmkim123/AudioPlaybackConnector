@@ -117,6 +117,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			SaveSettings();
 		}
 		Shell_NotifyIconW(NIM_DELETE, &g_nid);
+		if (g_hIconConnected) { DestroyIcon(g_hIconConnected); g_hIconConnected = nullptr; }
+		if (g_hIconDisconnected) { DestroyIcon(g_hIconDisconnected); g_hIconDisconnected = nullptr; }
+		UnregisterClassW(L"AudioPlaybackConnector", g_hInst);
 		PostQuitMessage(0);
 		break;
 	case WM_SETTINGCHANGE:
@@ -313,6 +316,7 @@ winrt::fire_and_forget ConnectDevice(DevicePicker picker, DeviceInformation devi
 						g_audioPlaybackConnections.erase(it);
 					}
 					sender.Close();
+					UpdateNotifyIcon();
 				}
 			});
 
@@ -348,7 +352,7 @@ winrt::fire_and_forget ConnectDevice(DevicePicker picker, DeviceInformation devi
 	{
 		success = false;
 		errorMessage.resize(64);
-		while (1)
+		for (int i = 0; i < 10; ++i)
 		{
 			auto result = swprintf(errorMessage.data(), errorMessage.size(), L"%s (0x%08X)", ex.message().c_str(), static_cast<uint32_t>(ex.code()));
 			if (result < 0)
@@ -367,6 +371,7 @@ winrt::fire_and_forget ConnectDevice(DevicePicker picker, DeviceInformation devi
 	if (success)
 	{
 		picker.SetDisplayStatus(device, _(L"Connected"), DevicePickerDisplayStatusOptions::ShowDisconnectButton);
+		UpdateNotifyIcon();
 	}
 	else
 	{
@@ -377,6 +382,7 @@ winrt::fire_and_forget ConnectDevice(DevicePicker picker, DeviceInformation devi
 			g_audioPlaybackConnections.erase(it);
 		}
 		picker.SetDisplayStatus(device, errorMessage, DevicePickerDisplayStatusOptions::ShowRetryButton);
+		UpdateNotifyIcon();
 	}
 }
 
@@ -407,6 +413,7 @@ void SetupDevicePicker()
 			g_audioPlaybackConnections.erase(it);
 		}
 		sender.SetDisplayStatus(device, {}, DevicePickerDisplayStatusOptions::None);
+		UpdateNotifyIcon();
 	});
 }
 
@@ -427,15 +434,15 @@ void SetupSvgIcon()
 	const std::string_view svg(svgData, size);
 	const int width = GetSystemMetrics(SM_CXSMICON), height = GetSystemMetrics(SM_CYSMICON);
 
-	g_hIconLight = SvgTohIcon(svg, width, height, { 0, 0, 0, 1 });
-	g_hIconDark = SvgTohIcon(svg, width, height, { 1, 1, 1, 1 });
+	// Create green icon for connected and red for disconnected
+	g_hIconConnected = SvgTohIcon(svg, width, height, { 0.0f, 1.0f, 0.0f, 1.0f });
+	g_hIconDisconnected = SvgTohIcon(svg, width, height, { 1.0f, 0.0f, 0.0f, 1.0f });
 }
 
 void UpdateNotifyIcon()
 {
-	DWORD value = 0, cbValue = sizeof(value);
-	LOG_IF_WIN32_ERROR(RegGetValueW(HKEY_CURRENT_USER, LR"(Software\Microsoft\Windows\CurrentVersion\Themes\Personalize)", L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &cbValue));
-	g_nid.hIcon = value != 0 ? g_hIconLight : g_hIconDark;
+	// Set icon based on connection state: green if any connection exists, red otherwise
+	g_nid.hIcon = !g_audioPlaybackConnections.empty() ? g_hIconConnected : g_hIconDisconnected;
 
 	if (!Shell_NotifyIconW(NIM_MODIFY, &g_nid))
 	{
