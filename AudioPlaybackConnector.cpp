@@ -315,7 +315,7 @@ winrt::fire_and_forget ConnectDevice(DevicePicker picker, DeviceInformation devi
 						g_devicePicker.SetDisplayStatus(it->second.first, {}, DevicePickerDisplayStatusOptions::None);
 						g_audioPlaybackConnections.erase(it);
 					}
-					sender.Close();
+//					sender.Close();
 					UpdateNotifyIcon();
 				}
 			});
